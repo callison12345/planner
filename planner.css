@@ -160,7 +160,8 @@ input.at { flex: none; width: 7.8rem; padding: .45rem .3rem; font-size: .9rem; }
 .obj input.at:focus { border-color: var(--line); background: var(--card); }
 input.at.unset { color: var(--muted); opacity: .6; }
 .add input.at { flex: none; background: var(--card); } /* beats the add row's "fill the width" rule */
-@media (max-width: 600px) { input.at { width: 6.9rem; font-size: .8rem; padding: .45rem .1rem; } }
+/* 16px on phones: iPhone Safari zooms the page in when you tap a box with smaller text */
+@media (max-width: 600px) { input.at { width: 7.4rem; font-size: 16px; padding: .4rem .2rem; } }
 .del { width: 2.4rem; height: 2.4rem; flex: none; padding: 0; background: transparent; color: var(--muted); }
 .del:hover { background: var(--rose); color: var(--rose-deep); }
 .add { display: flex; gap: .4rem; margin-top: .35rem; }
@@ -173,15 +174,19 @@ dialog { border: 0; border-radius: 18px; padding: 1.25rem; width: min(720px, cal
 dialog::backdrop { background: rgba(30, 30, 45, .35); }
 dialog h2 { margin-bottom: .25rem; }
 .srow { display: grid; gap: .4rem; align-items: center; margin-bottom: .6rem;
-        grid-template-columns: 1fr 9rem 9rem 6.75rem 2.4rem; grid-template-areas: "name start end color del"; }
+        grid-template-columns: minmax(0, 1fr) 9rem 9rem 6.75rem 2.4rem; grid-template-areas: "name start end color del"; }
 @media (max-width: 600px) {
-  /* phone: name, color and delete on top; start and end get half the width each so times aren't cut off */
-  .srow { grid-template-columns: 1fr 1fr 6.5rem 2.4rem; grid-template-areas: "name name color del" "start start end end";
+  /* phone: name, color and delete on top; start and end split the row below exactly in half.
+     minmax(0, …) lets a column shrink below what's inside it: phone browsers (Safari especially) draw time boxes
+     with a large built-in minimum width, and plain 1fr columns would grow to fit it and make the boxes overlap. */
+  .srow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.4rem; grid-template-areas: "name color del" "start end .";
           padding-bottom: .6rem; border-bottom: 1px solid var(--line); }
 }
 .srow .sname { grid-area: name; } .srow .sstart { grid-area: start; } .srow .send { grid-area: end; }
 .srow .scolor { grid-area: color; } .srow .del { grid-area: del; }
-.srow input, .srow select { width: 100%; min-width: 0; }
+.srow input, .srow select { width: 100%; min-width: 0; max-width: 100%; }
+/* Phone time boxes: drop the phone's own box styling so they obey the width they're given */
+input[type=time] { -webkit-appearance: none; appearance: none; min-height: 2.5rem; }
 #schedError, #copyError { color: var(--rose-deep); font-weight: 700; min-height: 1.4em; margin: .25rem 0; }
 
 /* Day header with the Copy day button */
