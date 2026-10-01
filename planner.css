@@ -175,7 +175,8 @@ input.at.unset { color: var(--muted); opacity: .6; }
    - overscroll-behavior stops a scroll that reaches the end from carrying on into the page behind
    - the page behind is locked while any pop-up is open */
 html:has(dialog[open]), body:has(dialog[open]) { overflow: hidden; }
-dialog { overscroll-behavior: contain; }
+/* Pop-ups only scroll up and down: no sideways drift (pinch-zoom still allowed for reading) */
+dialog { overscroll-behavior: contain; overflow-x: hidden; overflow-y: auto; touch-action: pan-y pinch-zoom; }
 dialog { border: 0; border-radius: 18px; padding: 1.25rem; width: min(720px, calc(100vw - 2rem)); max-height: calc(100svh - 2rem);
          background: var(--card); color: var(--ink); box-shadow: var(--shadow-lift); }
 dialog::backdrop { background: rgba(30, 30, 45, .35); }
