@@ -114,7 +114,7 @@ section { padding: 1rem; }
 }
 
 /* The day's plan opens over the calendar: a bottom sheet on phones, a centered panel on bigger screens */
-#dayDialog { padding: 0; width: min(640px, calc(100vw - 2rem)); max-height: 88dvh; }
+#dayDialog { padding: 0; width: min(640px, calc(100vw - 2rem)); max-height: 88svh; }
 #dayDialog .inner { padding: 1.1rem 1.1rem max(1.1rem, env(safe-area-inset-bottom)); }
 @media (max-width: 600px) {
   #dayDialog { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 20px 20px 0 0; }
@@ -169,7 +169,14 @@ input.at.unset { color: var(--muted); opacity: .6; }
 .add button { width: 2.6rem; height: 2.6rem; flex: none; padding: 0; background: var(--cd); color: var(--card); }
 
 /* Schedule editor */
-dialog { border: 0; border-radius: 18px; padding: 1.25rem; width: min(720px, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem);
+/* Pop-up windows hold still while you scroll inside them:
+   - svh sizes them to the smallest screen height, which doesn't change as the phone's address bar shrinks and grows
+     (dvh did, so the window resized and re-centered mid-scroll)
+   - overscroll-behavior stops a scroll that reaches the end from carrying on into the page behind
+   - the page behind is locked while any pop-up is open */
+html:has(dialog[open]), body:has(dialog[open]) { overflow: hidden; }
+dialog { overscroll-behavior: contain; }
+dialog { border: 0; border-radius: 18px; padding: 1.25rem; width: min(720px, calc(100vw - 2rem)); max-height: calc(100svh - 2rem);
          background: var(--card); color: var(--ink); box-shadow: var(--shadow-lift); }
 dialog::backdrop { background: rgba(30, 30, 45, .35); }
 dialog h2 { margin-bottom: .25rem; }
