@@ -1,0 +1,226 @@
+/* Classroom Planner styles. Light gray page, white cards, pastel colors. Always light (no dark mode).
+   Each pastel is a pair: a soft --x fill and a --x-deep shade for text on it (every pair passes WCAG AA contrast).
+   The planner's own color is baby yellow (--tint) with charcoal (--deep) for text, since yellow text would be unreadable. */
+
+/* Font and icons are bundled in vendor/ so everything works offline */
+@font-face {
+  font-family: 'Nunito'; font-style: normal; font-weight: 400 800; font-display: swap;
+  src: url(vendor/fonts/nunito-latin.woff2) format('woff2');
+}
+
+:root {
+  color-scheme: light;
+  --bg: #F3F4F6; --card: #FFFFFF; --field: #F9FAFB; --ink: #2D2A32; --muted: #62606A; --line: #E4E5EA;
+  --shadow: 0 1px 2px rgba(30, 30, 45, .05), 0 6px 20px rgba(30, 30, 45, .07);
+  --shadow-lift: 0 2px 4px rgba(30, 30, 45, .06), 0 12px 28px rgba(30, 30, 45, .12);
+
+  /* Subject colors */
+  --coral: #FAD4C8; --coral-deep: #A3402A;
+  --mint:  #CDEDE7; --mint-deep:  #17655C;
+  --peach: #FBE3B8; --peach-deep: #80520E;
+  --lav:   #E3D9F2; --lav-deep:   #573F88;
+  --sky:   #D3E6F7; --sky-deep:   #245A87;
+  --rose:  #F6CFD6; --rose-deep:  #983347;
+  --pink:  #F7D4EE; --pink-deep:  #8A2C74;
+  --indigo:#DADCF7; --indigo-deep:#383E8F;
+  --sage:  #DCEBC9; --sage-deep:  #3D5E22;
+  --lemon: #FAF0B0; --lemon-deep: #665300;
+  --slate: #E2E5EA; --slate-deep: #3E4652;
+  --sand:  #ECDFD0; --sand-deep:  #6B4A2E;
+
+  /* The planner's own color */
+  --tint: var(--lemon); --deep: var(--ink);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Nunito', system-ui, sans-serif; line-height: 1.45; background: var(--bg); color: var(--ink); }
+
+h1 { font-size: clamp(1.6rem, 3vw, 2.1rem); font-weight: 800; display: flex; align-items: center; gap: .75rem; }
+.badge { display: inline-grid; place-items: center; flex: none; width: 2.75rem; height: 2.75rem; border-radius: 14px;
+         background: var(--tint); color: var(--deep); font-size: 1.25rem; }
+
+section { background: var(--card); border-radius: 18px; box-shadow: var(--shadow); }
+h2 { margin: 0 0 .9rem; font-size: 1.1rem; font-weight: 800; display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+
+button { font: inherit; font-weight: 700; padding: .6rem 1.2rem; border: 1px solid transparent; border-radius: 999px;
+         background: var(--tint); color: var(--deep); cursor: pointer;
+         transition: transform .12s, box-shadow .15s, background-color .15s; }
+button:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(30, 30, 45, .12); }
+button:active { transform: none; box-shadow: none; }
+button:disabled { opacity: .6; cursor: default; transform: none; box-shadow: none; }
+button.ghost { background: transparent; border-color: var(--line); }
+button.ghost:hover { background: var(--tint); border-color: transparent; }
+button.small { padding: .3rem .85rem; font-size: .88rem; }
+
+input, select { font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--line);
+                border-radius: 12px; padding: .5rem .7rem; }
+input[type=checkbox] { accent-color: var(--deep); padding: 0; width: 1.15rem; height: 1.15rem; }
+:focus-visible { outline: 3px solid var(--deep); outline-offset: 2px; }
+
+.hint { color: var(--muted); font-size: .88rem; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ================= Page layout and components ================= */
+
+/* Phone first: respect the notch / home bar when installed to the home screen */
+body { padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+                max(1.5rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); }
+header.top, main { max-width: 1100px; margin: 0 auto; }
+header.top { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+header.top h1 { margin: 0; font-size: 1.6rem; }
+.tools { display: flex; gap: .4rem; flex-wrap: wrap; }
+section { padding: 1rem; }
+@media (max-width: 600px) { section { padding: .75rem .4rem; } }
+
+/* Month calendar */
+.calHead { display: flex; align-items: center; gap: .25rem; margin-bottom: .5rem; }
+.calHead h2 { flex: 1; margin: 0; font-size: 1.25rem; }
+/* The month and year in the title double as dropdowns to jump anywhere */
+.jump { display: flex; justify-content: flex-start; gap: .1rem; min-width: 0; } /* theme spreads h2 contents apart; keep these together */
+.jump select { font: inherit; font-weight: 800; color: var(--ink); background: transparent; border: 0; border-radius: 10px;
+               padding: .2rem .35rem; cursor: pointer; min-width: 0;
+               field-sizing: content; /* fit the chosen month, not the longest one (where supported) */ }
+.jump select:hover, .jump select:focus-visible { background: var(--tint); }
+@media (max-width: 600px) { .calHead h2 { font-size: 1.05rem; } .jump select { padding: .2rem .15rem; } }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.icon { width: 2.5rem; height: 2.5rem; padding: 0; background: transparent; color: var(--ink); }
+.icon:hover { background: var(--tint); color: var(--deep); }
+.dow, #grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.dow span { text-align: center; font-size: .75rem; font-weight: 800; color: var(--muted); padding: .25rem 0; }
+#grid { touch-action: pan-y; } /* horizontal swipes change the month */
+/* Each day is a box; planned objectives show as readable labels in their subject's color */
+#grid { gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.cell { min-width: 0; min-height: 7.5rem; display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: .3rem .25rem .4rem;
+        border-radius: 0; background: var(--card); color: var(--ink); font-weight: 700; }
+.cell:hover { transform: none; box-shadow: none; background: var(--field); }
+.cell .num { align-self: center; width: 1.8rem; height: 1.8rem; flex: none; display: grid; place-items: center; border-radius: 50%; font-size: .9rem; }
+.cell.wknd { background: var(--field); }
+.cell.wknd .num { color: var(--muted); }
+.cell.out .num, .cell.out .chip { opacity: .45; }
+.cell.today .num { background: var(--tint); color: var(--ink); font-weight: 800; }
+.chip { display: block; font-size: .74rem; font-weight: 700; line-height: 1.3; padding: 2px 6px; border-radius: 6px; text-align: left;
+        background: var(--c); color: var(--cd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip.done { text-decoration: line-through; opacity: .6; }
+.more { font-size: .7rem; font-weight: 800; color: var(--muted); text-align: left; padding: 0 6px; }
+@media (max-width: 600px) {
+  .cell { min-height: 5.6rem; padding: .2rem 2px .3rem; gap: 2px; }
+  .cell .num { width: 1.55rem; height: 1.55rem; font-size: .8rem; }
+  /* Day boxes are narrow on a phone, so labels wrap onto two lines instead of cutting off after a few letters */
+  /* vertical spacing is a clear border, not padding, so a clipped third line can't peek through */
+  .chip { font-size: .66rem; line-height: 1.2; padding: 0 3px; border-block: 2px solid transparent; border-radius: 4px; white-space: normal; overflow-wrap: anywhere;
+          display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+  .more { font-size: .62rem; padding: 0 3px; }
+}
+
+/* The day's plan opens over the calendar: a bottom sheet on phones, a centered panel on bigger screens */
+#dayDialog { padding: 0; width: min(640px, calc(100vw - 2rem)); max-height: 88dvh; }
+#dayDialog .inner { padding: 1.1rem 1.1rem max(1.1rem, env(safe-area-inset-bottom)); }
+@media (max-width: 600px) {
+  #dayDialog { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 20px 20px 0 0; }
+}
+
+/* Selected day: one card per subject with its objectives */
+#dayLabel { margin-bottom: .25rem; }
+#dayHint { margin: 0 0 .75rem; }
+#dayHint:empty { display: none; }
+.dayActions { display: flex; gap: .4rem; flex-wrap: wrap; margin: .35rem 0 .75rem; }
+#dayOff[aria-pressed=true] { background: var(--ink); border-color: var(--ink); color: var(--card); }
+#dayHoliday { margin: 0 0 .6rem; font-weight: 800; color: var(--rose-deep); }
+#dayHoliday:empty { display: none; }
+#dayHoliday i { margin-right: .35rem; }
+
+/* Holidays on the calendar: red text with a star, no background, so they don't look like her own items */
+.hol { display: block; font-size: .72rem; font-weight: 800; line-height: 1.3; color: var(--rose-deep); text-align: left; padding: 0 3px;
+       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hol i { font-size: .85em; margin-right: 3px; }
+/* Day off (no school): a charcoal line struck corner to corner across the day */
+.cell { position: relative; }
+.cell.off::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+                   background: linear-gradient(to top right, transparent calc(50% - 1.5px), var(--ink) calc(50% - 1.5px),
+                               var(--ink) calc(50% + 1.5px), transparent calc(50% + 1.5px)); }
+@media (max-width: 600px) {
+  .hol { font-size: .62rem; white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical;
+         -webkit-line-clamp: 2; line-clamp: 2; padding: 0 2px; }
+}
+.block { border-radius: 14px; padding: .7rem .8rem .8rem; margin-bottom: .75rem; background: var(--field); } /* the + button carries the subject color */
+.blockHead { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.blockHead .name { font-weight: 800; flex: 1; }
+.blockHead .time { color: var(--muted); font-size: .85rem; font-weight: 700; }
+.blockHead .prog { color: var(--muted); font-size: .8rem; font-weight: 800; }
+.objs { list-style: none; margin: .4rem 0 0; padding: 0; }
+.obj { display: flex; align-items: center; gap: .4rem; }
+.obj input[type=checkbox] { width: 1.35rem; height: 1.35rem; flex: none; accent-color: var(--ink); }
+.obj input[type=text] { flex: 1; min-width: 0; border-color: transparent; background: transparent; padding: .45rem .5rem; }
+.obj input[type=text]:focus { border-color: var(--line); background: var(--card); }
+.obj.done input[type=text] { text-decoration: line-through; color: var(--muted); }
+/* Optional activity time: looks like plain text until tapped; faded when blank */
+input.at { flex: none; width: 7.8rem; padding: .45rem .3rem; font-size: .9rem; }
+.obj input.at { border-color: transparent; background: transparent; }
+.obj input.at:focus { border-color: var(--line); background: var(--card); }
+input.at.unset { color: var(--muted); opacity: .6; }
+.add input.at { flex: none; background: var(--card); } /* beats the add row's "fill the width" rule */
+@media (max-width: 600px) { input.at { width: 6.9rem; font-size: .8rem; padding: .45rem .1rem; } }
+.del { width: 2.4rem; height: 2.4rem; flex: none; padding: 0; background: transparent; color: var(--muted); }
+.del:hover { background: var(--rose); color: var(--rose-deep); }
+.add { display: flex; gap: .4rem; margin-top: .35rem; }
+.add input { flex: 1; min-width: 0; background: var(--card); }
+.add button { width: 2.6rem; height: 2.6rem; flex: none; padding: 0; background: var(--cd); color: var(--card); }
+
+/* Schedule editor */
+dialog { border: 0; border-radius: 18px; padding: 1.25rem; width: min(720px, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem);
+         background: var(--card); color: var(--ink); box-shadow: var(--shadow-lift); }
+dialog::backdrop { background: rgba(30, 30, 45, .35); }
+dialog h2 { margin-bottom: .25rem; }
+.srow { display: grid; gap: .4rem; align-items: center; margin-bottom: .6rem;
+        grid-template-columns: 1fr 9rem 9rem 6.75rem 2.4rem; grid-template-areas: "name start end color del"; }
+@media (max-width: 600px) {
+  /* phone: name, color and delete on top; start and end get half the width each so times aren't cut off */
+  .srow { grid-template-columns: 1fr 1fr 6.5rem 2.4rem; grid-template-areas: "name name color del" "start start end end";
+          padding-bottom: .6rem; border-bottom: 1px solid var(--line); }
+}
+.srow .sname { grid-area: name; } .srow .sstart { grid-area: start; } .srow .send { grid-area: end; }
+.srow .scolor { grid-area: color; } .srow .del { grid-area: del; }
+.srow input, .srow select { width: 100%; min-width: 0; }
+#schedError, #copyError { color: var(--rose-deep); font-weight: 700; min-height: 1.4em; margin: .25rem 0; }
+
+/* Day header with the Copy day button */
+.dayHead { display: flex; align-items: center; gap: .5rem; margin-bottom: .25rem; }
+.dayHead h2 { margin: 0; flex: 1; }
+.dayHead h2:focus { outline: none; } /* focused on open so screen readers announce the day */
+#copyDialog { width: min(440px, calc(100vw - 2rem)); }
+
+/* Repeat one activity: weekday toggles + a date range */
+#repeatDialog { width: min(480px, calc(100vw - 2rem)); }
+.dlgTitle:focus { outline: none; } /* focused on open so screen readers announce it */
+.dows { border: 0; padding: 0; margin: .75rem 0; display: flex; flex-wrap: wrap; gap: .35rem; }
+.dows legend { font-weight: 700; margin-bottom: .4rem; padding: 0; }
+.dows label { display: inline-flex; align-items: center; gap: .3rem; padding: .35rem .65rem; border-radius: 999px;
+              border: 1px solid var(--line); font-weight: 700; font-size: .9rem; cursor: pointer; }
+.dows label:has(input:checked) { background: var(--tint); border-color: var(--ink); }
+.dows input { width: 1rem; height: 1rem; accent-color: var(--ink); }
+.range { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.range .field { display: flex; flex-direction: column; gap: .3rem; font-weight: 700; }
+.range input { width: 100%; min-width: 0; }
+#repeatCount { font-weight: 700; margin: .75rem 0 0; min-height: 1.4em; }
+#repeatError { color: var(--rose-deep); font-weight: 700; min-height: 1.4em; margin: .25rem 0; }
+.end button[value=repeat] { background: var(--tint); color: var(--ink); }
+#dayNote { margin: 0 0 .75rem; font-weight: 700; color: var(--mint-deep); }
+#dayNote:empty { display: none; }
+.rep { width: 2.4rem; height: 2.4rem; flex: none; padding: 0; background: transparent; color: var(--muted); }
+.rep:hover { background: var(--tint); color: var(--ink); }
+.range .field { min-width: 0; } /* let the date boxes shrink to fit the window */
+/* Phones: an activity's time, repeat and delete drop to a second line so the name has room */
+@media (max-width: 600px) {
+  .obj.timed { flex-wrap: wrap; row-gap: 0; }
+  .obj.timed input[type=text] { flex-basis: calc(100% - 2.75rem); } /* room for the checkbox + its margin */
+  .obj.timed input.at { margin-left: auto; }
+}
+#copyDialog label.field { display: flex; flex-direction: column; gap: .3rem; font-weight: 700; margin: .75rem 0; }
+#copyDialog fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: .4rem; }
+#copyDialog fieldset label { display: flex; gap: .5rem; align-items: center; }
+#copyDialog input[type=radio] { width: 1.15rem; height: 1.15rem; accent-color: var(--deep); }
+.end { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .75rem; }
+.end button[value=save], .end button[value=copy] { background: var(--tint); color: var(--ink); }
+#saveWarn { background: var(--rose); color: var(--rose-deep); font-weight: 700; padding: .6rem .9rem; border-radius: 12px;
+            max-width: 1100px; margin: 0 auto 1rem; }

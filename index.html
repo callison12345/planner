@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Planner</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#FAF0B0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Planner">
+<link rel="apple-touch-icon" href="icons/planner-180.png">
+<link rel="icon" href="icons/planner-192.png">
+<!-- Colors, font and icons are bundled here so the planner works offline -->
+<link rel="stylesheet" href="vendor/fontawesome/css/fontawesome.min.css">
+<link rel="stylesheet" href="vendor/fontawesome/css/solid.min.css">
+<link rel="stylesheet" href="planner.css">
+</head>
+<body>
+<header class="top">
+  <h1><span class="badge"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span> Planner</h1>
+  <div class="tools">
+    <button class="ghost small" id="editSchedule"><i class="fa-solid fa-clock" aria-hidden="true"></i> Schedule</button>
+    <button class="ghost small" id="backup"><i class="fa-solid fa-download" aria-hidden="true"></i> Backup</button>
+    <button class="ghost small" id="restore"><i class="fa-solid fa-upload" aria-hidden="true"></i> Restore</button>
+    <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+  </div>
+</header>
+<p id="saveWarn" hidden>Couldn't save on this device. Make a backup so nothing is lost.</p>
+
+<main>
+  <section aria-label="Calendar">
+    <div class="calHead">
+      <button class="icon" id="prev" aria-label="Previous month"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
+      <h2 class="jump">
+        <span id="monthLabel" class="sr-only" aria-live="polite"></span>
+        <select id="jumpMonth" aria-label="Go to month"></select>
+        <select id="jumpYear" aria-label="Go to year"></select>
+      </h2>
+      <button class="ghost small" id="today">Today</button>
+      <button class="icon" id="next" aria-label="Next month"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+    </div>
+    <div class="dow" aria-hidden="true"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+    <div id="grid"></div>
+  </section>
+</main>
+
+<dialog id="dayDialog" aria-labelledby="dayLabel">
+  <div class="inner">
+    <div class="dayHead">
+      <h2 id="dayLabel" tabindex="-1" autofocus></h2>
+      <button class="icon" id="closeDay" aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </div>
+    <div class="dayActions">
+      <button class="ghost small" id="dayOff" aria-pressed="false"><i class="fa-solid fa-ban" aria-hidden="true"></i> Day off</button>
+      <button class="ghost small" id="copyDay"><i class="fa-solid fa-copy" aria-hidden="true"></i> Copy day</button>
+    </div>
+    <p id="dayHoliday"></p>
+    <p class="hint" id="dayHint"></p>
+    <p id="dayNote" aria-live="polite"></p>
+    <div id="blocks"></div>
+  </div>
+</dialog>
+
+<dialog id="schedDialog">
+  <form method="dialog" id="schedForm">
+    <h2>Daily schedule</h2>
+    <p class="hint">Your subjects and times. They repeat every school day (Monday–Friday).</p>
+    <div id="schedRows"></div>
+    <button type="button" class="ghost small" id="addSubject"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add subject</button>
+    <p id="schedError" aria-live="polite"></p>
+    <div class="end">
+      <button class="ghost" value="cancel" formnovalidate>Cancel</button>
+      <button value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="repeatDialog">
+  <form method="dialog" id="repeatForm">
+    <h2 tabindex="-1" autofocus class="dlgTitle">Copy to more days</h2>
+    <p class="hint" id="repeatWhat"></p>
+    <fieldset class="dows">
+      <legend>Every</legend>
+      <label><input type="checkbox" name="dow" value="0"> Sun</label>
+      <label><input type="checkbox" name="dow" value="1"> Mon</label>
+      <label><input type="checkbox" name="dow" value="2"> Tue</label>
+      <label><input type="checkbox" name="dow" value="3"> Wed</label>
+      <label><input type="checkbox" name="dow" value="4"> Thu</label>
+      <label><input type="checkbox" name="dow" value="5"> Fri</label>
+      <label><input type="checkbox" name="dow" value="6"> Sat</label>
+    </fieldset>
+    <div class="range">
+      <label class="field">From <input type="date" id="repeatFrom" required></label>
+      <label class="field">To <input type="date" id="repeatTo" required></label>
+    </div>
+    <p id="repeatCount" aria-live="polite"></p>
+    <p id="repeatError" aria-live="polite"></p>
+    <div class="end">
+      <button class="ghost" value="cancel" formnovalidate>Cancel</button>
+      <button value="repeat">Copy</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="copyDialog">
+  <form method="dialog" id="copyForm">
+    <h2>Copy this day's plan</h2>
+    <p class="hint" id="copyFrom"></p>
+    <label class="field">Copy to <input type="date" id="copyTo" required></label>
+    <fieldset>
+      <legend class="hint">If that day already has objectives:</legend>
+      <label><input type="radio" name="copyMode" value="add" checked> Add to them</label>
+      <label><input type="radio" name="copyMode" value="replace"> Replace them</label>
+    </fieldset>
+    <p id="copyError" aria-live="polite"></p>
+    <div class="end">
+      <button class="ghost" value="cancel" formnovalidate>Cancel</button>
+      <button value="copy">Copy</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, '0');
+const keyOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; // local date (not UTC)
+const sameDay = (a, b) => keyOf(a) === keyOf(b);
+const uid = () => Math.random().toString(36).slice(2, 10);
+// Subject colors (pastel pairs from planner.css), in color-wheel order
+const COLORS = { coral: 'Coral', peach: 'Peach', lemon: 'Yellow', sage: 'Green', mint: 'Mint', sky: 'Blue',
+                 indigo: 'Indigo', lav: 'Purple', pink: 'Pink', rose: 'Rose', sand: 'Brown', slate: 'Gray' };
+const isWeekend = d => d.getDay() === 0 || d.getDay() === 6;
+const isDayOff = d => !isWeekend(d) && data.daysOff.includes(keyOf(d)); // a weekday she marked "no school"
+const isSchoolDay = d => !isWeekend(d) && !isDayOff(d);
+
+// A starter schedule she edits to match her day
+const SAMPLE = [
+  { name: 'Meeting', start: '08:00', end: '08:20', color: 'peach' },
+  { name: 'Reading', start: '08:20', end: '09:30', color: 'mint' },
+  { name: 'Math', start: '09:30', end: '10:30', color: 'sky' },
+  { name: 'Writing', start: '10:30', end: '11:30', color: 'lav' },
+  { name: 'Science', start: '12:15', end: '13:00', color: 'coral' },
+  { name: 'Social studies', start: '13:00', end: '13:45', color: 'rose' },
+];
+
+// ---------- Data: { schedule: [{id, name, start, end, color}], plans: { 'YYYY-MM-DD': { subjectId: [{id, text, done}] } } }
+const TIME = /^\d\d:\d\d$/;
+const valid = d => !!d && Array.isArray(d.schedule) && d.plans && typeof d.plans === 'object' && !Array.isArray(d.plans)
+  && d.schedule.every(s => s && typeof s.id === 'string' && s.id !== 'activities' && typeof s.name === 'string' && TIME.test(s.start) && TIME.test(s.end) && s.color in COLORS)
+  && Object.entries(d.plans).every(([k, day]) => /^\d{4}-\d\d-\d\d$/.test(k) && day && typeof day === 'object'
+     && Object.values(day).every(list => Array.isArray(list)
+        && list.every(o => o && typeof o.id === 'string' && typeof o.text === 'string' && typeof o.done === 'boolean'
+           && (o.time === undefined || TIME.test(o.time)))))
+  && (d.daysOff === undefined || (Array.isArray(d.daysOff) && d.daysOff.every(k => typeof k === 'string' && /^\d{4}-\d\d-\d\d$/.test(k))));
+
+// Older saves and backups have no daysOff list yet
+const withDefaults = d => ({ ...d, daysOff: d.daysOff ?? [] });
+
+function load() {
+  try { const d = JSON.parse(localStorage.getItem('planner')); if (valid(d)) return withDefaults(d); } catch {}
+  return { schedule: SAMPLE.map(s => ({ id: uid(), ...s })), plans: {}, daysOff: [] };
+}
+function save() {
+  try { localStorage.setItem('planner', JSON.stringify(data)); $('saveWarn').hidden = true; }
+  catch { $('saveWarn').hidden = false; }
+}
+navigator.storage?.persist?.(); // ask the browser not to clear the planner when the phone is low on space
+
+let data = load();
+const now = new Date();
+let selected = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+let view = new Date(now.getFullYear(), now.getMonth(), 1);
+
+// A day's own one-off items ("Email parent", "Cheer practice"), stored next to the subjects under a fixed id
+// (subject ids are random 8-character strings, so they can't clash)
+const ACTIVITIES = { id: 'activities', name: 'Activities', color: 'slate' };
+
+const objectives = (key, subj) => data.plans[key]?.[subj] ?? [];
+// Timed items first, earliest first; untimed ones after, in the order they were added
+const byTime = list => [...list].sort((a, b) => (a.time ?? '99').localeCompare(b.time ?? '99'));
+// Compact phone-calendar style: "3:30p", "9a"
+const shortTime = t => { const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + pad(m) : ''}${h < 12 ? 'a' : 'p'}`; };
+function timeInput(value, label) {
+  const at = el('input', value ? 'at' : 'at unset');
+  at.type = 'time';
+  at.value = value ?? '';
+  at.setAttribute('aria-label', label);
+  return at;
+}
+function setObjectives(key, subj, list) {
+  const day = data.plans[key] ??= {};
+  if (list.length) day[subj] = list; else delete day[subj];
+  if (!Object.keys(day).length) delete data.plans[key];
+  save();
+}
+const sortedSchedule = () => [...data.schedule].sort((a, b) => a.start.localeCompare(b.start));
+const fmtTime = t => { const [h, m] = t.split(':').map(Number); return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function iconButton(cls, icon, label) {
+  const b = el('button', cls);
+  b.type = 'button';
+  b.innerHTML = `<i class="fa-solid fa-${icon}" aria-hidden="true"></i>`;
+  b.setAttribute('aria-label', label);
+  b.title = label;
+  return b;
+}
+
+// ---------- US holidays: calculated for any year, nothing stored ----------
+const nthWeekday = (y, m, wd, n) => new Date(y, m, 1 + ((wd - new Date(y, m, 1).getDay() + 7) % 7) + (n - 1) * 7);
+const lastWeekday = (y, m, wd) => { const end = new Date(y, m + 1, 0); return new Date(y, m, end.getDate() - ((end.getDay() - wd + 7) % 7)); };
+function easter(y) { // Anonymous Gregorian algorithm
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), n = h + l - 7 * m + 114;
+  return new Date(y, Math.floor(n / 31) - 1, (n % 31) + 1);
+}
+function holidaysOf(y) {
+  const on = (m, d) => new Date(y, m, d);
+  const federal = [
+    [on(0, 1), "New Year's Day"], [nthWeekday(y, 0, 1, 3), 'Martin Luther King Jr. Day'], [nthWeekday(y, 1, 1, 3), "Presidents' Day"],
+    [lastWeekday(y, 4, 1), 'Memorial Day'], [on(5, 19), 'Juneteenth'], [on(6, 4), 'Independence Day'], [nthWeekday(y, 8, 1, 1), 'Labor Day'],
+    [nthWeekday(y, 9, 1, 2), "Columbus Day / Indigenous Peoples' Day"], [on(10, 11), 'Veterans Day'], [nthWeekday(y, 10, 4, 4), 'Thanksgiving'],
+    [on(11, 25), 'Christmas Day'],
+  ];
+  const observances = [
+    [on(1, 14), "Valentine's Day"], [on(2, 17), "St. Patrick's Day"], [easter(y), 'Easter'], [nthWeekday(y, 4, 0, 2), "Mother's Day"],
+    [nthWeekday(y, 5, 0, 3), "Father's Day"], [on(9, 31), 'Halloween'], [on(11, 24), 'Christmas Eve'], [on(11, 31), "New Year's Eve"],
+  ];
+  // A federal holiday on a Saturday is observed Friday; on a Sunday, Monday
+  const observed = federal.filter(([d]) => d.getDay() % 6 === 0)
+    .map(([d, name]) => [new Date(y, d.getMonth(), d.getDate() + (d.getDay() === 6 ? -1 : 1)), `${name} (observed)`]);
+  return [...federal, ...observed, ...observances];
+}
+const holidayMaps = new Map();
+function holidaysOn(d) {
+  const y = d.getFullYear();
+  if (!holidayMaps.has(y)) {
+    const map = new Map();
+    // next year's New Year's Day can be observed on Dec 31 of this year
+    for (const [date, name] of [...holidaysOf(y), ...holidaysOf(y + 1)]) {
+      if (date.getFullYear() !== y) continue;
+      const k = keyOf(date);
+      map.set(k, [...(map.get(k) ?? []), name]);
+    }
+    holidayMaps.set(y, map);
+  }
+  return holidayMaps.get(y).get(keyOf(d)) ?? [];
+}
+
+// ---------- Month view ----------
+const phone = matchMedia('(max-width: 600px)');
+phone.addEventListener('change', () => renderMonth());
+
+function renderMonth() {
+  const y = view.getFullYear(), m = view.getMonth();
+  $('monthLabel').textContent = view.toLocaleDateString([], { month: 'long', year: 'numeric' }); // announced to screen readers
+  syncJump();
+  const offset = new Date(y, m, 1).getDay();
+  const cells = Math.ceil((offset + new Date(y, m + 1, 0).getDate()) / 7) * 7;
+  const schedule = sortedSchedule();
+  const max = phone.matches ? 3 : 4; // labels that fit in a day box
+
+  $('grid').replaceChildren(...Array.from({ length: cells }, (_, i) => {
+    const d = new Date(y, m, 1 - offset + i), key = keyOf(d);
+    const b = el('button', 'cell');
+    b.type = 'button';
+    if (d.getMonth() !== m) b.classList.add('out');
+    if (isWeekend(d)) b.classList.add('wknd');
+    if (isDayOff(d)) b.classList.add('off');
+    if (sameDay(d, now)) { b.classList.add('today'); b.setAttribute('aria-current', 'date'); }
+    b.append(el('span', 'num', d.getDate()));
+
+    // Holidays first (red with a star), then activities (gray), then objectives in their subject colors; the rest as "+N more"
+    const holidays = holidaysOn(d);
+    for (const name of holidays) {
+      const h = el('span', 'hol');
+      h.innerHTML = '<i class="fa-solid fa-star" aria-hidden="true"></i>';
+      h.append(name);
+      b.append(h);
+    }
+    // No school (weekend or day off): only activities show; subject plans stay saved but hidden
+    const items = [ACTIVITIES, ...(isSchoolDay(d) ? schedule : [])]
+      .flatMap(s => (s === ACTIVITIES ? byTime(objectives(key, s.id)) : objectives(key, s.id)).map(o => ({ o, s })));
+    const slots = Math.max(1, max - holidays.length);
+    for (const { o, s } of items.slice(0, items.length > slots ? slots - 1 : slots)) {
+      const chip = el('span', o.done ? 'chip done' : 'chip', o.time ? `${shortTime(o.time)} ${o.text}` : o.text);
+      chip.style.setProperty('--c', `var(--${s.color})`);
+      chip.style.setProperty('--cd', `var(--${s.color}-deep)`);
+      b.append(chip);
+    }
+    if (items.length > slots) b.append(el('span', 'more', `+${items.length - slots + 1} more`));
+    b.setAttribute('aria-label', [longDate(d), ...holidays, isDayOff(d) && 'day off',
+      items.length && `${items.length} item${items.length === 1 ? '' : 's'} planned`].filter(Boolean).join(', '));
+    b.onclick = () => {
+      if (justSwiped) return;
+      if (d.getMonth() !== m) { view = new Date(d.getFullYear(), d.getMonth(), 1); renderMonth(); }
+      openDay(d);
+    };
+    return b;
+  }));
+}
+
+// Month / year dropdowns in the title
+$('jumpMonth').append(...Array.from({ length: 12 }, (_, i) => {
+  const o = el('option', '', new Date(2000, i, 1).toLocaleDateString([], { month: 'long' }));
+  o.value = i;
+  return o;
+}));
+function syncJump() {
+  // Years: a couple back, several ahead, plus any year she has plans in (and the one being viewed)
+  const planned = Object.keys(data.plans).map(k => +k.slice(0, 4));
+  const from = Math.min(now.getFullYear() - 2, view.getFullYear(), ...planned);
+  const to = Math.max(now.getFullYear() + 5, view.getFullYear(), ...planned);
+  if ($('jumpYear').options[0]?.value != from || $('jumpYear').options.length !== to - from + 1) {
+    $('jumpYear').replaceChildren(...Array.from({ length: to - from + 1 }, (_, i) => { const o = el('option', '', from + i); o.value = from + i; return o; }));
+  }
+  $('jumpMonth').value = view.getMonth();
+  $('jumpYear').value = view.getFullYear();
+}
+$('jumpMonth').onchange = $('jumpYear').onchange = () => {
+  view = new Date(+$('jumpYear').value, +$('jumpMonth').value, 1);
+  renderMonth();
+};
+
+function changeMonth(step) { view = new Date(view.getFullYear(), view.getMonth() + step, 1); renderMonth(); }
+$('prev').onclick = () => changeMonth(-1);
+$('next').onclick = () => changeMonth(1);
+$('today').onclick = () => {
+  selected = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  view = new Date(now.getFullYear(), now.getMonth(), 1);
+  renderMonth();
+};
+
+// Swipe left/right on the calendar to change month, like a phone calendar
+let swipe = null, justSwiped = false;
+$('grid').addEventListener('pointerdown', e => { swipe = { x: e.clientX, y: e.clientY }; });
+$('grid').addEventListener('pointerup', e => {
+  if (!swipe) return;
+  const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+  swipe = null;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    changeMonth(dx < 0 ? 1 : -1);
+    justSwiped = true; // a swipe that ends on a day shouldn't also open it
+    setTimeout(() => { justSwiped = false; });
+  }
+});
+
+// ---------- Day panel: opens when a day is tapped ----------
+function openDay(d) {
+  selected = d;
+  renderDay();
+  if (!$('dayDialog').open) $('dayDialog').showModal();
+}
+$('closeDay').onclick = () => $('dayDialog').close();
+// Mark / unmark a weekday as no school. Its subject plans are kept (just hidden) in case it's turned back on.
+$('dayOff').onclick = () => {
+  const k = keyOf(selected);
+  data.daysOff = isDayOff(selected) ? data.daysOff.filter(x => x !== k) : [...data.daysOff, k].sort();
+  save();
+  render();
+};
+// Tapping the dimmed area around the panel closes it
+$('dayDialog').addEventListener('click', e => { if (e.target === $('dayDialog')) $('dayDialog').close(); });
+// One card: a header plus single-line items she can check off, edit and delete.
+// Used for each subject and for the day's own Activities card.
+function listBlock(key, s, { time, noun, placeholder, timed }) {
+  const block = el('div', 'block');
+  block.style.setProperty('--cd', `var(--${s.color}-deep)`);
+  const list = objectives(key, s.id);
+  const head = el('div', 'blockHead');
+  const prog = el('span', 'prog');
+  const updateProgress = () => {
+    const l = objectives(key, s.id);
+    prog.textContent = l.length ? `${l.filter(o => o.done).length}/${l.length} done` : '';
+  };
+  head.append(el('span', 'name', s.name));
+  if (time) head.append(el('span', 'time', time));
+  head.append(prog);
+  updateProgress();
+
+  const ul = el('ul', 'objs');
+  for (const o of timed ? byTime(list) : list) {
+    const li = el('li', (o.done ? 'obj done' : 'obj') + (timed ? ' timed' : ''));
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.checked = o.done;
+    cb.setAttribute('aria-label', `Done: ${o.text}`);
+    cb.onchange = () => {
+      o.done = cb.checked;
+      li.classList.toggle('done', o.done);
+      setObjectives(key, s.id, list);
+      updateProgress();
+      renderMonth();
+    };
+    const text = el('input');
+    text.type = 'text';
+    text.value = o.text;
+    text.setAttribute('aria-label', `${s.name} ${noun}`);
+    text.onchange = () => {
+      const t = text.value.trim();
+      if (!t) { setObjectives(key, s.id, list.filter(x => x !== o)); return render(); }
+      o.text = t;
+      setObjectives(key, s.id, list);
+      renderMonth(); // update the calendar label (the panel isn't redrawn, so focus stays where she tapped next)
+    };
+    text.onkeydown = e => { if (e.key === 'Enter') text.blur(); };
+    const del = iconButton('del', 'trash-can', `Delete ${noun}`);
+    del.onclick = () => { setObjectives(key, s.id, list.filter(x => x !== o)); render(); };
+    li.append(cb, text);
+    if (timed) {
+      // Optional time (activities only); blank means "anytime that day"
+      const at = timeInput(o.time, `Time for ${o.text} (optional)`);
+      at.onchange = () => {
+        if (at.value) o.time = at.value; else delete o.time;
+        at.classList.toggle('unset', !o.time);
+        setObjectives(key, s.id, list);
+        renderMonth(); // calendar re-sorts; the panel re-sorts next time it's drawn
+      };
+      const rep = iconButton('rep', 'repeat', `Copy "${o.text}" to more days`);
+      rep.onclick = () => openRepeat(key, o);
+      li.append(at, rep);
+    }
+    li.append(del);
+    ul.append(li);
+  }
+
+  const add = el('form', 'add');
+  const input = el('input');
+  input.placeholder = placeholder;
+  input.dataset.add = s.id;
+  input.setAttribute('aria-label', `Add ${noun === 'activity' ? 'an activity' : `a ${s.name} objective`}`);
+  const addAt = timed ? timeInput('', 'Time for the new activity (optional)') : null;
+  if (addAt) addAt.onchange = () => addAt.classList.toggle('unset', !addAt.value);
+  const addBtn = iconButton('', 'plus', `Add ${noun}`);
+  addBtn.type = 'submit';
+  add.append(input, ...(addAt ? [addAt] : []), addBtn);
+  add.onsubmit = e => {
+    e.preventDefault();
+    const t = input.value.trim();
+    if (!t) return;
+    setObjectives(key, s.id, [...list, { id: uid(), text: t, done: false, ...(addAt?.value && { time: addAt.value }) }]);
+    render(s.id); // keep typing the next one
+  };
+
+  block.append(head, ul, add);
+  return block;
+}
+
+function renderDay(refocus) {
+  const key = keyOf(selected);
+  $('dayNote').textContent = '';
+  const opts = { weekday: 'long', month: 'long', day: 'numeric' };
+  if (selected.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
+  $('dayLabel').textContent = selected.toLocaleDateString([], opts);
+
+  const schedule = sortedSchedule(), school = isSchoolDay(selected), off = isDayOff(selected);
+  $('copyDay').disabled = !countIn(key, copyableTo(selected)); // nothing planned that could be copied
+  $('dayOff').hidden = isWeekend(selected); // weekends are already no-school days
+  $('dayOff').setAttribute('aria-pressed', off);
+  const holidays = holidaysOn(selected);
+  $('dayHoliday').innerHTML = holidays.length ? '<i class="fa-solid fa-star" aria-hidden="true"></i>' : '';
+  $('dayHoliday').append(holidays.join(' · '));
+  const hidden = off ? schedule.reduce((n, s) => n + objectives(key, s.id).length, 0) : 0;
+  $('dayHint').textContent = isWeekend(selected) ? 'Weekend: no classes scheduled.'
+    : off ? `Day off: no school.${hidden ? ` ${hidden} planned objective${hidden === 1 ? ' is' : 's are'} hidden; turn off Day off to see ${hidden === 1 ? 'it' : 'them'}.` : ''}`
+    : !schedule.length ? 'Add your subjects with the Schedule button.' : '';
+
+  // The day's own activities first (any day, weekends too), then her subjects on school days
+  $('blocks').replaceChildren(
+    listBlock(key, ACTIVITIES, { noun: 'activity', placeholder: 'Add an activity, like "Email parent"…', timed: true }),
+    ...(school ? schedule.map(s => listBlock(key, s, { time: `${fmtTime(s.start)} – ${fmtTime(s.end)}`, noun: 'objective', placeholder: 'Add an objective…' })) : []));
+  if (refocus) document.querySelector(`[data-add="${refocus}"]`)?.focus();
+}
+
+function render(refocus) { renderMonth(); renderDay(refocus); }
+
+// ---------- Schedule editor ----------
+function scheduleRow(s) {
+  const row = el('div', 'srow');
+  row.dataset.id = s.id;
+  const name = el('input', 'sname');
+  name.value = s.name; name.placeholder = 'Subject'; name.setAttribute('aria-label', 'Subject name');
+  const start = el('input', 'sstart'); start.type = 'time'; start.value = s.start; start.setAttribute('aria-label', 'Start time');
+  const end = el('input', 'send'); end.type = 'time'; end.value = s.end; end.setAttribute('aria-label', 'End time');
+  const color = el('select', 'scolor');
+  color.setAttribute('aria-label', 'Color');
+  for (const [k, label] of Object.entries(COLORS)) {
+    const o = el('option', '', label);
+    o.value = k;
+    o.style.background = `var(--${k})`; // swatch in the list (computers; phones use their own picker)
+    o.style.color = `var(--${k}-deep)`;
+    color.append(o);
+  }
+  color.value = s.color;
+  const tint = () => { color.style.background = `var(--${color.value})`; color.style.color = `var(--${color.value}-deep)`; };
+  color.onchange = tint; tint();
+  const del = iconButton('del', 'trash-can', 'Remove subject');
+  del.onclick = () => row.remove();
+  row.append(name, start, end, color, del);
+  return row;
+}
+
+$('editSchedule').onclick = () => {
+  $('schedRows').replaceChildren(...sortedSchedule().map(scheduleRow));
+  $('schedError').textContent = '';
+  $('schedDialog').showModal();
+};
+$('addSubject').onclick = () => {
+  const last = sortedSchedule().at(-1);
+  const row = scheduleRow({ id: uid(), name: '', start: last?.end ?? '08:00', end: last?.end ?? '09:00', color: 'mint' });
+  $('schedRows').append(row);
+  row.querySelector('.sname').focus();
+};
+$('schedForm').addEventListener('submit', e => {
+  if (e.submitter?.value !== 'save') return;
+  const rows = [...$('schedRows').children].map(r => ({
+    id: r.dataset.id, name: r.querySelector('.sname').value.trim(),
+    start: r.querySelector('.sstart').value, end: r.querySelector('.send').value, color: r.querySelector('.scolor').value,
+  }));
+  const bad = rows.find(r => !r.name) ? 'Every subject needs a name.'
+    : rows.find(r => !TIME.test(r.start) || !TIME.test(r.end) || r.end <= r.start) ? 'Each subject needs an end time after its start time.' : '';
+  if (bad) { e.preventDefault(); $('schedError').textContent = bad; return; }
+  // Removed subjects' objectives stay saved, just hidden, so nothing is lost by accident
+  data.schedule = rows;
+  save();
+  render();
+});
+
+// ---------- Copy a day's plan to another day ----------
+const dateFromKey = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+const DATE = /^\d{4}-\d\d-\d\d$/;
+
+// ---------- Repeat one activity: copy it to every chosen weekday in a date range ----------
+let repeating = null; // { key, o }: the activity being copied and the day it's on
+const sameActivity = (a, b) => a.text === b.text && (a.time ?? '') === (b.time ?? '');
+
+function openRepeat(key, o) {
+  repeating = { key, o };
+  const d = dateFromKey(key);
+  $('repeatWhat').textContent = `Copies "${o.text}"${o.time ? ` at ${fmtTime(o.time)}` : ''} to each chosen day. Copies start unchecked.`;
+  $('repeatForm').querySelectorAll('input[name=dow]').forEach(c => { c.checked = +c.value === d.getDay(); });
+  $('repeatFrom').value = keyOf(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1));
+  $('repeatTo').value = keyOf(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 56)); // 8 weeks out
+  $('repeatError').textContent = '';
+  updateRepeatCount();
+  $('repeatDialog').showModal();
+}
+
+// Problem with the form, or null; plus the matching days
+function repeatPlan() {
+  const from = $('repeatFrom').value, to = $('repeatTo').value;
+  const dows = [...$('repeatForm').querySelectorAll('input[name=dow]:checked')].map(c => +c.value);
+  if (!dows.length) return { problem: 'Pick at least one day of the week.' };
+  if (!DATE.test(from) || !DATE.test(to)) return { problem: 'Pick a start and end date.' };
+  if (to < from) return { problem: 'The end date is before the start date.' };
+  if ((dateFromKey(to) - dateFromKey(from)) / 864e5 > 366) return { problem: 'Pick a range of a year or less.' };
+  const days = [];
+  for (const d = dateFromKey(from); keyOf(d) <= to; d.setDate(d.getDate() + 1)) {
+    if (dows.includes(d.getDay()) && keyOf(d) !== repeating.key) days.push(keyOf(d));
+  }
+  if (!days.length) return { problem: 'No matching days in that range.' };
+  const fresh = days.filter(k => !objectives(k, ACTIVITIES.id).some(x => sameActivity(x, repeating.o)));
+  return { days, fresh };
+}
+
+function updateRepeatCount() {
+  const p = repeatPlan();
+  const skip = p.days ? p.days.length - p.fresh.length : 0;
+  $('repeatCount').textContent = p.problem ? '' : `Adds to ${p.fresh.length} day${p.fresh.length === 1 ? '' : 's'}`
+    + (skip ? ` (${skip} already ${skip === 1 ? 'has' : 'have'} it)` : '') + '.';
+}
+$('repeatForm').addEventListener('input', () => { $('repeatError').textContent = ''; updateRepeatCount(); });
+
+$('repeatForm').addEventListener('submit', e => {
+  if (e.submitter?.value !== 'repeat') return;
+  const p = repeatPlan();
+  const problem = p.problem ?? (!p.fresh.length ? 'Every matching day already has this activity.' : '');
+  if (problem) { e.preventDefault(); $('repeatError').textContent = problem; return; }
+  const { o } = repeating;
+  for (const k of p.fresh) {
+    const day = data.plans[k] ??= {};
+    day[ACTIVITIES.id] = [...(day[ACTIVITIES.id] ?? []), { id: uid(), text: o.text, done: false, ...(o.time && { time: o.time }) }];
+  }
+  save();
+  renderMonth();
+  $('dayNote').textContent = `Copied "${o.text}" to ${p.fresh.length} day${p.fresh.length === 1 ? '' : 's'}.`;
+});
+const longDate = d => d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+function nextSchoolDay(d) {
+  const n = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+  while (!isSchoolDay(n)) n.setDate(n.getDate() + 1);
+  return n;
+}
+
+// What can land on a day: weekends have no classes, so they only take activities
+const copyableTo = d => new Set(isSchoolDay(d) ? [ACTIVITIES.id, ...data.schedule.map(s => s.id)] : [ACTIVITIES.id]);
+const countIn = (key, ids) => [...ids].reduce((n, id) => n + objectives(key, id).length, 0);
+
+// Copies the items of `fromKey` (unchecked, as new items) onto `toKey`. Returns how many were copied.
+function copyDay(fromKey, toKey, replace) {
+  const copyable = copyableTo(dateFromKey(toKey));
+  const target = data.plans[toKey] ?? {};
+  // Replacing only clears what's being copied in; anything else on that day (e.g. a removed subject's items) is kept
+  const dest = replace ? Object.fromEntries(Object.entries(target).filter(([subj]) => !copyable.has(subj))) : structuredClone(target);
+  let count = 0;
+  for (const [subj, list] of Object.entries(data.plans[fromKey] ?? {})) {
+    if (!copyable.has(subj)) continue;
+    dest[subj] = [...(dest[subj] ?? []), ...list.map(o => ({ id: uid(), text: o.text, done: false, ...(o.time && { time: o.time }) }))];
+    count += list.length;
+  }
+  if (Object.keys(dest).length) data.plans[toKey] = dest; else delete data.plans[toKey];
+  save();
+  return count;
+}
+
+$('copyDay').onclick = () => {
+  $('copyFrom').textContent = `Copies everything planned on ${longDate(selected)}. The copies start unchecked. Weekends and days off only get the activities.`;
+  $('copyTo').value = keyOf(nextSchoolDay(selected));
+  $('copyForm').copyMode.value = 'add';
+  $('copyError').textContent = '';
+  $('copyDialog').showModal();
+};
+$('copyForm').addEventListener('submit', e => {
+  if (e.submitter?.value !== 'copy') return;
+  const toKey = $('copyTo').value, fromKey = keyOf(selected);
+  const to = /^\d{4}-\d\d-\d\d$/.test(toKey) ? dateFromKey(toKey) : null;
+  const bad = !to ? 'Pick a day to copy to.' : toKey === fromKey ? "That's the same day."
+    : !countIn(fromKey, copyableTo(to)) ? 'Weekends and days off only get activities, and this day has none to copy.' : '';
+  if (bad) { e.preventDefault(); $('copyError').textContent = bad; return; }
+  copyDay(fromKey, toKey, $('copyForm').copyMode.value === 'replace');
+  selected = to; // jump to the copy so she can see it
+  view = new Date(to.getFullYear(), to.getMonth(), 1);
+  render();
+});
+
+// ---------- Backup / restore ----------
+$('backup').onclick = () => {
+  const a = el('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+  a.download = `planner-backup-${keyOf(new Date())}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$('restore').onclick = () => $('restoreFile').click();
+$('restoreFile').onchange = async () => {
+  const file = $('restoreFile').files[0];
+  $('restoreFile').value = '';
+  if (!file) return;
+  let d;
+  try { d = JSON.parse(await file.text()); } catch {}
+  if (!valid(d)) return alert("That file isn't a planner backup.");
+  if (!confirm('Replace everything in the planner with this backup?')) return;
+  data = withDefaults(d);
+  save();
+  render();
+};
+
+renderMonth();
+
+// Installable / offline when served over https (or localhost); not available from a local file
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
