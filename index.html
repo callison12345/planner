@@ -20,6 +20,7 @@
   <h1><span class="badge"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span> Planner</h1>
   <div class="tools">
     <button class="ghost small" id="editSchedule"><i class="fa-solid fa-clock" aria-hidden="true"></i> Schedule</button>
+    <button class="ghost small" id="editUnits"><i class="fa-solid fa-layer-group" aria-hidden="true"></i> Units</button>
     <button class="ghost small" id="backup"><i class="fa-solid fa-download" aria-hidden="true"></i> Backup</button>
     <button class="ghost small" id="restore"><i class="fa-solid fa-upload" aria-hidden="true"></i> Restore</button>
     <input type="file" id="restoreFile" accept=".json,application/json" hidden>
@@ -84,6 +85,31 @@
     <div class="end">
       <button class="ghost" value="cancel" formnovalidate>Cancel</button>
       <button value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="unitsDialog" aria-labelledby="unitsTitle">
+  <form method="dialog" id="unitForm">
+    <h2 id="unitsTitle" class="dlgTitle" tabindex="-1" autofocus>Units</h2>
+    <p class="hint">A unit is a stretch of days for one subject, like "Fractions" in Math. It shows across the calendar with a day count.</p>
+    <ul id="unitList"></ul>
+    <p class="hint" id="unitNone">No units yet.</p>
+    <fieldset class="unitEdit">
+      <legend id="unitEditTitle">New unit</legend>
+      <div class="range">
+        <label class="field">Subject <select id="unitSubject"></select></label>
+        <label class="field">Name <input id="unitName" maxlength="60" placeholder="Fractions" autocomplete="off"></label>
+        <label class="field">From <input type="date" id="unitStart"></label>
+        <label class="field">To <input type="date" id="unitEnd"></label>
+      </div>
+      <p id="unitCount" aria-live="polite"></p>
+      <p id="unitError" aria-live="polite"></p>
+    </fieldset>
+    <div class="end">
+      <button type="button" class="ghost" id="unitNew" hidden>New unit</button>
+      <button class="ghost" value="cancel" formnovalidate>Close</button>
+      <button value="save" id="unitSave">Add unit</button>
     </div>
   </form>
 </dialog>
@@ -179,14 +205,17 @@ const valid = d => !!d && Array.isArray(d.schedule) && d.plans && typeof d.plans
      && Object.values(day).every(list => Array.isArray(list)
         && list.every(o => o && typeof o.id === 'string' && typeof o.text === 'string' && typeof o.done === 'boolean'
            && (o.time === undefined || TIME.test(o.time)))))
-  && (d.daysOff === undefined || (Array.isArray(d.daysOff) && d.daysOff.every(k => typeof k === 'string' && /^\d{4}-\d\d-\d\d$/.test(k))));
+  && (d.daysOff === undefined || (Array.isArray(d.daysOff) && d.daysOff.every(k => typeof k === 'string' && /^\d{4}-\d\d-\d\d$/.test(k))))
+  // units: [{ id, subject (a schedule id), name, start, end }] with start <= end
+  && (d.units === undefined || (Array.isArray(d.units) && d.units.every(u => u && typeof u.id === 'string' && typeof u.subject === 'string'
+     && typeof u.name === 'string' && /^\d{4}-\d\d-\d\d$/.test(u.start) && /^\d{4}-\d\d-\d\d$/.test(u.end) && u.start <= u.end)));
 
-// Older saves and backups have no daysOff list yet
-const withDefaults = d => ({ ...d, daysOff: d.daysOff ?? [] });
+// Older saves and backups have no daysOff or units lists yet
+const withDefaults = d => ({ ...d, daysOff: d.daysOff ?? [], units: d.units ?? [] });
 
 function load() {
   try { const d = JSON.parse(localStorage.getItem('planner')); if (valid(d)) return withDefaults(d); } catch {}
-  return { schedule: SAMPLE.map(s => ({ id: uid(), ...s })), plans: {}, daysOff: [] };
+  return { schedule: SAMPLE.map(s => ({ id: uid(), ...s })), plans: {}, daysOff: [], units: [] };
 }
 function save() {
   try { localStorage.setItem('planner', JSON.stringify(data)); $('saveWarn').hidden = true; }
@@ -202,6 +231,20 @@ let view = new Date(now.getFullYear(), now.getMonth(), 1);
 // A day's own one-off items ("Email parent", "Cheer practice"), stored next to the subjects under a fixed id
 // (subject ids are random 8-character strings, so they can't clash)
 const ACTIVITIES = { id: 'activities', name: 'Activities', color: 'slate' };
+
+// ---------- Units: a named stretch of days for one subject ("Fractions" in Math, Oct 6–24) ----------
+const subjectOf = id => data.schedule.find(s => s.id === id);
+// Units on a day (optionally for one subject); units of a subject removed from the schedule stay saved but hidden
+const unitsOn = (key, subj) => data.units
+  .filter(u => u.start <= key && key <= u.end && subjectOf(u.subject) && (!subj || u.subject === subj))
+  .sort((a, b) => a.start.localeCompare(b.start) || a.name.localeCompare(b.name));
+function schoolDayCount(fromKey, toKey) {
+  let n = 0;
+  for (const d = dateFromKey(fromKey); keyOf(d) <= toKey; d.setDate(d.getDate() + 1)) if (isSchoolDay(d)) n++;
+  return n;
+}
+// "day 3 of 14", counting school days only (weekends and days off skipped); '' when the day itself isn't a school day
+const unitDay = (u, key) => isSchoolDay(dateFromKey(key)) ? `day ${schoolDayCount(u.start, key)} of ${schoolDayCount(u.start, u.end)}` : '';
 
 const objectives = (key, subj) => data.plans[key]?.[subj] ?? [];
 // Timed items first, earliest first; untimed ones after, in the order they were added
@@ -303,6 +346,26 @@ function chipFor(o, s) {
   return chip;
 }
 const itemsOn = (key, s) => s === ACTIVITIES ? byTime(objectives(key, s.id)) : objectives(key, s.id);
+// A unit's bar in a month-view day; rounded where the unit starts/ends, named at the start of each stretch
+function unitBar(u, key, d, firstCell) {
+  const s = subjectOf(u.subject), bar = el('span', 'ubar');
+  bar.style.setProperty('--c', `var(--${s.color})`);
+  bar.style.setProperty('--cd', `var(--${s.color}-deep)`);
+  if (key === u.start) bar.classList.add('ustart');
+  if (key === u.end) bar.classList.add('uend');
+  if (key === u.start || d.getDay() === 0 || firstCell) bar.textContent = u.name; // where a row of the bar begins
+  bar.title = `${s.name} unit: ${u.name}`;
+  return bar;
+}
+// A unit's name + day count, for the week view and day panel
+function unitTag(u, key, cls = 'utag') {
+  const s = subjectOf(u.subject), t = el('span', cls);
+  t.style.setProperty('--c', `var(--${s.color})`);
+  t.style.setProperty('--cd', `var(--${s.color}-deep)`);
+  t.innerHTML = '<i class="fa-solid fa-layer-group" aria-hidden="true"></i>';
+  t.append(` ${u.name}${unitDay(u, key) ? ` · ${unitDay(u, key)}` : ''}`);
+  return t;
+}
 function holidayLabel(name) {
   const h = el('span', 'hol');
   h.innerHTML = '<i class="fa-solid fa-star" aria-hidden="true"></i>';
@@ -320,6 +383,15 @@ function renderMonth() {
   const cells = Math.ceil((offset + new Date(y, m + 1, 0).getDate()) / 7) * 7;
   const schedule = sortedSchedule();
   const max = phone.matches ? 3 : 4; // labels that fit in a day box
+  // Each unit keeps one lane (row) for the whole grid so its bar runs straight across the days
+  const first = keyOf(new Date(y, m, 1 - offset)), last = keyOf(new Date(y, m, cells - offset));
+  const laneEnds = [], laneOf = new Map();
+  for (const u of data.units.filter(u => subjectOf(u.subject) && u.start <= last && u.end >= first)
+    .sort((a, b) => a.start.localeCompare(b.start) || a.name.localeCompare(b.name))) {
+    const i = laneEnds.findIndex(end => end < u.start);
+    laneOf.set(u, i < 0 ? laneEnds.length : i);
+    laneEnds[laneOf.get(u)] = u.end;
+  }
 
   $('grid').replaceChildren(...Array.from({ length: cells }, (_, i) => {
     const d = new Date(y, m, 1 - offset + i), key = keyOf(d);
@@ -331,15 +403,20 @@ function renderMonth() {
     if (sameDay(d, now)) { b.classList.add('today'); b.setAttribute('aria-current', 'date'); }
     b.append(el('span', 'num', d.getDate()));
 
-    // Holidays first (red with a star), then activities (gray), then objectives in their subject colors; the rest as "+N more"
+    // Units first: a bar across their days in the subject's color (named where a stretch starts, on computers),
+    // in their lane, with blank spacers for empty lanes above so bars line up from day to day
+    const units = unitsOn(key), lanes = [];
+    for (const u of units) lanes[laneOf.get(u)] = u;
+    for (const u of Array.from(lanes)) b.append(u ? unitBar(u, key, d, i === 0) : el('span', 'ubar gap'));
+    // Then holidays (red with a star), activities (gray), and objectives in their subject colors; the rest as "+N more"
     const holidays = holidaysOn(d);
     for (const name of holidays) b.append(holidayLabel(name));
     // No school (weekend or day off): only activities show; subject plans stay saved but hidden
     const items = [ACTIVITIES, ...(isSchoolDay(d) ? schedule : [])].flatMap(s => itemsOn(key, s).map(o => ({ o, s })));
-    const slots = Math.max(1, max - holidays.length);
+    const slots = Math.max(1, max - holidays.length - (phone.matches ? 0 : lanes.length)); // phone bars are thin
     for (const { o, s } of items.slice(0, items.length > slots ? slots - 1 : slots)) b.append(chipFor(o, s));
     if (items.length > slots) b.append(el('span', 'more', `+${items.length - slots + 1} more`));
-    b.setAttribute('aria-label', [longDate(d), ...holidays, isDayOff(d) && 'day off',
+    b.setAttribute('aria-label', [longDate(d), ...holidays, isDayOff(d) && 'day off', ...units.map(u => `${u.name} unit`),
       items.length && `${items.length} item${items.length === 1 ? '' : 's'} planned`].filter(Boolean).join(', '));
     b.onclick = () => {
       if (justSwiped) return;
@@ -396,6 +473,7 @@ function renderWeek() {
         const nm = el('span', 'nm');
         nm.append(el('span', 'dot'), s.name);
         const its = el('span', 'its');
+        if (s !== ACTIVITIES) for (const u of unitsOn(key, s.id)) its.append(unitTag(u, key)); // the unit comes first
         if (list.length) its.append(...list.map(o => chipFor(o, s))); else its.append(el('span', 'none', '—'));
         line.append(nm, its);
         card.append(line);
@@ -426,8 +504,10 @@ function renderWeek() {
       c.type = 'button';
       if (isWeekend(d)) c.classList.add('wknd');
       if (sameDay(d, now)) c.classList.add('today');
-      c.append(...list.map(o => chipFor(o, s)));
-      c.setAttribute('aria-label', `${s.name}, ${longDate(d)}: ${list.length ? list.map(o => o.text).join('; ') : 'nothing planned'}`);
+      const units = s === ACTIVITIES ? [] : unitsOn(key, s.id);
+      c.append(...units.map(u => unitTag(u, key)), ...list.map(o => chipFor(o, s)));
+      c.setAttribute('aria-label', `${s.name}, ${longDate(d)}: ${[...units.map(u => `${u.name} unit, ${unitDay(u, key)}`),
+        ...(list.length ? list.map(o => o.text) : ['nothing planned'])].join('; ')}`);
       c.onclick = open(d, s.id); // a cell opens just that subject's list (or just Activities)
       cells.push(c);
     }
@@ -471,7 +551,11 @@ async function buildWeekPdf() {
 
   const head = [['', ...cols.map(d => [`${d.toLocaleDateString([], { weekday: 'short' })} ${md(d)}`, ...holidaysOn(d), isDayOff(d) ? 'Day off' : ''].filter(Boolean).join('\n'))]];
   const body = rows.map(s => [
-    s === ACTIVITIES ? 'Activities' : `${s.name}\n${fmtTime(s.start)} – ${fmtTime(s.end)}`,
+    s === ACTIVITIES ? 'Activities' : [`${s.name}`, `${fmtTime(s.start)} – ${fmtTime(s.end)}`,
+      // units overlapping this week, with their dates
+      ...data.units.filter(u => u.subject === s.id && u.start <= keyOf(days[6]) && u.end >= keyOf(days[0]))
+        .sort((a, b) => a.start.localeCompare(b.start))
+        .map(u => `Unit: ${u.name} (${md(dateFromKey(u.start))}–${md(dateFromKey(u.end))})`)].join('\n'),
     ...cols.map(d => {
       if (s !== ACTIVITIES && !isSchoolDay(d)) return isDayOff(d) ? 'Day off' : '';
       return itemsOn(keyOf(d), s).map(o => `${o.done ? '[x]' : '[  ]'} ${o.time ? fmtTime(o.time) + '  ' : ''}${o.text}`).join('\n');
@@ -831,7 +915,7 @@ function renderDay(refocus) {
   if (only) $('dayFocusText').textContent = `Showing ${only.name} only.`;
   $('blocks').replaceChildren(...(only ? [only] : lists).map(s => s === ACTIVITIES
     ? listBlock(key, ACTIVITIES, { noun: 'activity', placeholder: 'Add an activity, like "Email parent"…', timed: true })
-    : listBlock(key, s, { time: `${fmtTime(s.start)} – ${fmtTime(s.end)}`, noun: 'objective', placeholder: 'Add an objective…' })));
+    : withUnits(key, s, listBlock(key, s, { time: `${fmtTime(s.start)} – ${fmtTime(s.end)}`, noun: 'objective', placeholder: 'Add an objective…' }))));
   if (refocus) document.querySelector(`[data-add="${refocus}"]`)?.focus();
 }
 
@@ -888,6 +972,114 @@ $('schedForm').addEventListener('submit', e => {
   save();
   render();
 });
+
+// ---------- Units editor: list, add, edit, delete ----------
+let editingUnit = null; // the unit in the form, or null when adding a new one
+const shortDate = k => dateFromKey(k).toLocaleDateString([], { month: 'short', day: 'numeric' });
+const addDays = (k, n) => { const d = dateFromKey(k); d.setDate(d.getDate() + n); return keyOf(d); };
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+function renderUnitList() {
+  const units = [...data.units].sort((a, b) => a.start.localeCompare(b.start) || a.name.localeCompare(b.name));
+  $('unitNone').hidden = units.length > 0;
+  $('unitList').replaceChildren(...units.map(u => {
+    const s = subjectOf(u.subject), li = el('li', 'urow');
+    li.style.setProperty('--cd', `var(--${s?.color ?? 'slate'}-deep)`);
+    const info = el('span', 'uinfo');
+    info.append(el('span', 'uname', u.name),
+      el('span', 'umeta', `${s?.name ?? 'Removed subject'} · ${shortDate(u.start)} – ${shortDate(u.end)} · ${plural(schoolDayCount(u.start, u.end), 'school day')}`));
+    const edit = iconButton('rep', 'pen', `Edit ${u.name}`);
+    edit.onclick = () => { editUnit(u); $('unitName').focus(); };
+    const del = iconButton('del', 'trash-can', `Delete ${u.name}`);
+    del.onclick = () => {
+      if (!confirm(`Delete the unit "${u.name}"? Its objectives stay.`)) return;
+      data.units = data.units.filter(x => x !== u);
+      save();
+      if (editingUnit === u) editUnit(null);
+      renderUnitList();
+      render();
+    };
+    li.append(el('span', 'dot'), info, edit, del);
+    return li;
+  }));
+}
+
+// Fills the form: an existing unit, or a new one (optionally starting on a subject and day)
+function editUnit(u, { subject, start } = {}) {
+  editingUnit = u;
+  const subjects = sortedSchedule();
+  $('unitSubject').replaceChildren(...subjects.map(s => { const o = el('option', '', s.name); o.value = s.id; return o; }));
+  $('unitSubject').value = u?.subject ?? subject ?? subjects[0]?.id ?? ''; // blank if the unit's subject was removed
+  $('unitName').value = u?.name ?? '';
+  $('unitStart').value = u?.start ?? start ?? keyOf(now);
+  $('unitEnd').value = u?.end ?? addDays($('unitStart').value, 11); // a Monday start ends Friday of the next week
+  $('unitEditTitle').textContent = u ? `Edit "${u.name}"` : 'New unit';
+  $('unitSave').textContent = u ? 'Save' : 'Add unit';
+  $('unitNew').hidden = !u;
+  $('unitError').textContent = '';
+  updateUnitCount();
+}
+function openUnits(u = null, prefill) {
+  renderUnitList();
+  editUnit(u, prefill);
+  $('unitsDialog').showModal();
+  if (u || prefill) $('unitName').focus();
+}
+
+// The form's unit, plus what's wrong with it ('' when it's fine)
+function unitFromForm() {
+  const u = { subject: $('unitSubject').value, name: $('unitName').value.trim(), start: $('unitStart').value, end: $('unitEnd').value };
+  const problem = !data.schedule.length ? 'Add your subjects with the Schedule button first.'
+    : !subjectOf(u.subject) ? 'Pick a subject.'
+    : !u.name ? 'Give the unit a name.'
+    : !DATE.test(u.start) || !DATE.test(u.end) ? 'Pick a start and end date.'
+    : u.end < u.start ? 'The end date is before the start date.'
+    : (dateFromKey(u.end) - dateFromKey(u.start)) / 864e5 > 366 ? 'Pick a range of a year or less.' : '';
+  return { u, problem };
+}
+function updateUnitCount() {
+  const { u } = unitFromForm();
+  const ok = DATE.test(u.start) && DATE.test(u.end) && u.start <= u.end && dateFromKey(u.end) - dateFromKey(u.start) <= 366 * 864e5;
+  $('unitCount').textContent = ok ? plural(schoolDayCount(u.start, u.end), 'school day') : '';
+}
+$('editUnits').onclick = () => openUnits();
+$('unitNew').onclick = () => { editUnit(null); $('unitName').focus(); };
+$('unitForm').addEventListener('input', () => { $('unitError').textContent = ''; updateUnitCount(); });
+// Enter in the name box saves (the form's first button is Close, which Enter would otherwise press)
+$('unitName').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('unitSave').click(); } };
+$('unitForm').addEventListener('submit', e => {
+  if (e.submitter?.value !== 'save') return;
+  const { u, problem } = unitFromForm();
+  if (problem) { e.preventDefault(); $('unitError').textContent = problem; return; }
+  if (editingUnit) Object.assign(editingUnit, u); else data.units.push({ id: uid(), ...u });
+  save();
+  render();
+});
+// Day panel: under a subject's heading, its unit(s) on this day (tap to edit), or a button to start one here
+function withUnits(key, s, block) {
+  const head = block.querySelector('.blockHead'), units = unitsOn(key, s.id);
+  if (!units.length) {
+    const add = el('button', 'ghost small uadd');
+    add.type = 'button';
+    add.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i> Unit';
+    add.setAttribute('aria-label', `Start a ${s.name} unit on this day`);
+    add.onclick = () => openUnits(null, { subject: s.id, start: key });
+    head.append(add);
+    return block;
+  }
+  const row = el('div', 'ulines');
+  for (const u of units) {
+    const b = el('button', 'uline');
+    b.type = 'button';
+    b.append(unitTag(u, key));
+    b.insertAdjacentHTML('beforeend', '<i class="fa-solid fa-pen" aria-hidden="true"></i>');
+    b.setAttribute('aria-label', `${s.name} unit: ${u.name}, ${unitDay(u, key)}. Edit unit`);
+    b.onclick = () => openUnits(u);
+    row.append(b);
+  }
+  head.after(row);
+  return block;
+}
 
 // ---------- Copy a day's plan to another day ----------
 const dateFromKey = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
