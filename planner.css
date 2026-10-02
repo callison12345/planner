@@ -266,8 +266,9 @@ dialog h2 { margin-bottom: .25rem; }
 .srow .sname { grid-area: name; } .srow .sstart { grid-area: start; } .srow .send { grid-area: end; }
 .srow .scolor { grid-area: color; } .srow .del { grid-area: del; }
 .srow input, .srow select { width: 100%; min-width: 0; max-width: 100%; }
-/* Phone time boxes: drop the phone's own box styling so they obey the width they're given */
-input[type=time] { -webkit-appearance: none; appearance: none; min-height: 2.5rem; }
+/* Phone time and date boxes: drop the phone's own box styling so they obey the width they're given */
+input[type=time], input[type=date] { -webkit-appearance: none; appearance: none; min-height: 2.5rem; }
+input[type=date]::-webkit-date-and-time-value { text-align: left; } /* Safari centers it once appearance is off */
 #schedError, #copyError { color: var(--rose-deep); font-weight: 700; min-height: 1.4em; margin: .25rem 0; }
 
 /* Day header with the Copy day button */
@@ -285,9 +286,10 @@ input[type=time] { -webkit-appearance: none; appearance: none; min-height: 2.5re
               border: 1px solid var(--line); font-weight: 700; font-size: .9rem; cursor: pointer; }
 .dows label:has(input:checked) { background: var(--tint); border-color: var(--ink); }
 .dows input { width: 1rem; height: 1rem; accent-color: var(--ink); }
-.range { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+/* minmax(0, …): as in the schedule rows, plain 1fr columns grow to fit Safari's wide date boxes and overlap */
+.range { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .6rem; }
 .range .field { display: flex; flex-direction: column; gap: .3rem; font-weight: 700; }
-.range input { width: 100%; min-width: 0; }
+.range input { display: block; width: 100%; min-width: 0; }
 #repeatCount { font-weight: 700; margin: .75rem 0 0; min-height: 1.4em; }
 #repeatError { color: var(--rose-deep); font-weight: 700; min-height: 1.4em; margin: .25rem 0; }
 .end button[value=repeat] { background: var(--tint); color: var(--ink); }
