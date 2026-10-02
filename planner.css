@@ -33,6 +33,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; } /* otherwise a display: grid/flex rule would keep "hidden" things visible */
 body { margin: 0; font-family: 'Nunito', system-ui, sans-serif; line-height: 1.45; background: var(--bg); color: var(--ink); }
 
 h1 { font-size: clamp(1.6rem, 3vw, 2.1rem); font-weight: 800; display: flex; align-items: center; gap: .75rem; }
@@ -89,6 +90,74 @@ section { padding: 1rem; }
 .dow, #grid { display: grid; grid-template-columns: repeat(7, 1fr); }
 .dow span { text-align: center; font-size: .75rem; font-weight: 800; color: var(--muted); padding: .25rem 0; }
 #grid { touch-action: pan-y; } /* horizontal swipes change the month */
+/* Month | Week switch */
+.calTop { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; }
+.modes { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--field); border: 1px solid var(--line); }
+.modes button { padding: .3rem .95rem; font-size: .88rem; background: transparent; color: var(--muted); }
+.modes button:hover { transform: none; box-shadow: none; color: var(--ink); }
+.modes button[aria-pressed=true] { background: var(--tint); color: var(--ink); box-shadow: 0 1px 2px rgba(30, 30, 45, .1); }
+.weekRange { font-weight: 800; color: var(--muted); white-space: nowrap; }
+.calTopRight { display: flex; align-items: center; gap: .6rem; }
+#weekPdf { white-space: nowrap; flex: none; } /* icon and label stay on one line */
+
+/* PDF preview: the real pages (drawn by pdf.js), with the actions pinned to the bottom */
+#pdfDialog { padding: 0; width: min(960px, calc(100vw - 2rem)); }
+.pdfInner { padding: 1.1rem 1.1rem 0; }
+#pdfPages { display: flex; flex-direction: column; gap: .75rem; min-height: 8rem; margin: .5rem 0 0; }
+.pdfPage { display: block; width: 100%; height: auto; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+.pdfMsg { margin: 2rem 0; text-align: center; font-weight: 700; }
+.pdfMsg.error { color: var(--rose-deep); }
+.pdfBar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem;
+          margin: .75rem -1.1rem 0; padding: .75rem 1.1rem max(.9rem, env(safe-area-inset-bottom)); background: var(--card);
+          border-top: 1px solid var(--line); }
+.pdfBar button:not(.ghost) { background: var(--tint); color: var(--ink); }
+@media (max-width: 600px) {
+  #pdfDialog { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 20px 20px 0 0; } /* bottom sheet, like the day panel */
+  .pdfBar button { flex: 1; }
+}
+@media (max-width: 600px) { .modes button { padding: .3rem .75rem; } .calTopRight { gap: .4rem; } }
+
+/* Week view on bigger screens: a planbook grid (days across, subjects down; weekends narrower) */
+.wgrid { display: grid; grid-template-columns: 8.5rem repeat(5, minmax(0, 1fr)) repeat(2, minmax(0, .6fr)); gap: 1px;
+         background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.wgrid > * { background: var(--card); min-width: 0; }
+.wcorner { background: var(--field) !important; }
+.whead { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: .4rem .25rem; border-radius: 0;
+         color: var(--ink); font-weight: 700; }
+.whead:hover { transform: none; box-shadow: none; background: var(--field); }
+.whead .wd { font-size: .72rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.whead .dn { width: 1.8rem; height: 1.8rem; display: grid; place-items: center; border-radius: 50%; }
+.whead.today .dn { background: var(--tint); font-weight: 800; }
+.whead .hol { max-width: 100%; }
+.offtag { font-size: .68rem; font-weight: 800; padding: 0 .45rem; border-radius: 999px; background: var(--ink); color: var(--card); }
+.wlabel { display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: .45rem .6rem; }
+.wlabel .nm, .wline .nm { display: flex; align-items: center; gap: .4rem; font-weight: 800; font-size: .86rem; min-width: 0; }
+.wlabel .tm { font-size: .72rem; color: var(--muted); padding-left: 1rem; }
+.dot { width: .6rem; height: .6rem; flex: none; border-radius: 50%; background: var(--cd); }
+.wcell { min-height: 4.25rem; display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: .3rem; border-radius: 0;
+         background: var(--card); color: var(--ink); font-weight: 600; text-align: left; }
+.wcell:hover { transform: none; box-shadow: none; background: var(--field); }
+.wcell .chip { white-space: normal; } /* room to read the whole objective */
+.wgrid .wknd, .wgrid .closed, .wgrid .whead.off { background: var(--field); }
+.wcell.today { background: color-mix(in srgb, var(--tint) 25%, var(--card)); }
+
+/* Week view on phones: a card per day */
+.wlist { display: flex; flex-direction: column; gap: .55rem; }
+.wday { display: block; width: 100%; text-align: left; padding: .6rem .7rem; border-radius: 14px; border: 1px solid var(--line);
+        background: var(--card); color: var(--ink); font-weight: 600; }
+.wday:hover { transform: none; box-shadow: none; }
+.wday.today { border: 2px solid var(--ink); }
+.wday.wknd, .wday.off { background: var(--field); }
+.wdh { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; margin-bottom: .35rem; }
+.wdh .dt { font-weight: 800; }
+.wline { display: grid; grid-template-columns: 6.75rem minmax(0, 1fr); gap: .4rem; align-items: start; padding: 2px 0; }
+.wline .nm { padding-top: 2px; }
+.wline .nm span:last-child, .wline .nm { overflow-wrap: anywhere; }
+.its { display: flex; flex-wrap: wrap; gap: 3px; min-width: 0; }
+.none { color: var(--muted); margin: 0; }
+/* the month view's phone labels clamp to two lines; here there's room for the full text */
+.wday .chip { display: inline-block; white-space: normal; -webkit-line-clamp: none; line-clamp: none; font-size: .76rem; padding: 2px 6px; border: 0; }
+
 /* Each day is a box; planned objectives show as readable labels in their subject's color */
 #grid { gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
 .cell { min-width: 0; min-height: 7.5rem; display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: .3rem .25rem .4rem;
@@ -127,6 +196,10 @@ section { padding: 1rem; }
 .dayActions { display: flex; gap: .4rem; flex-wrap: wrap; margin: .35rem 0 .75rem; }
 #dayOff[aria-pressed=true] { background: var(--ink); border-color: var(--ink); color: var(--card); }
 #dayHoliday { margin: 0 0 .6rem; font-weight: 800; color: var(--rose-deep); }
+/* "Showing Reading only" when opened from one week-grid cell */
+#dayFocus { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem .75rem;
+            margin: 0 0 .75rem; padding: .45rem .5rem .45rem .8rem; border-radius: 12px; background: var(--tint); font-weight: 700; }
+#dayFocus button { background: var(--card); }
 #dayHoliday:empty { display: none; }
 #dayHoliday i { margin-right: .35rem; }
 

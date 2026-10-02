@@ -5,6 +5,8 @@ A phone-friendly planner for a teacher's day: a month calendar with each subject
 ## Features
 
 - **Calendar first.** A month view showing each day's objectives and activities as color-coded labels. Swipe or use the arrows to change months, or jump with the month and year dropdowns.
+- **Week view.** A planbook for the week: on a computer, days across and subjects down; on a phone, a card per day listing every subject ("—" marks anything not yet planned). Tap any cell or day to edit it. Switch with **Month | Week**; the choice is remembered.
+- **Week PDF.** In week view, the **PDF** button makes a one-page landscape planbook of the week (subjects × days, checkboxes, holidays, days off) and shows a preview of it. From the preview: **Share** on phones (Messages, Mail, Files, Print…), **Download**, or **Open to print** on computers. Works offline. Phones older than iOS 17.4 skip the preview and go straight to sharing.
 - **Daily schedule.** Subjects with times and one of 12 colors (**Schedule** button). They repeat Monday to Friday.
 - **Objectives.** Tap a day to add, check off, edit or delete objectives for each subject.
 - **Activities.** One-line items for a single day ("Email parent", "Cheer practice"), with an optional time. They work on weekends and days off too.
@@ -54,3 +56,7 @@ Push changes to the host. Installed copies pick them up automatically, usually t
 
 - [Nunito](https://fonts.google.com/specimen/Nunito), SIL Open Font License (`vendor/fonts/Nunito-OFL.txt`)
 - [Font Awesome Free](https://fontawesome.com) 6.7.2, icons CC BY 4.0, fonts SIL OFL, code MIT (`vendor/fontawesome/LICENSE.txt`)
+- [jsPDF](https://github.com/parallax/jsPDF) 4.2.1 and [jsPDF-AutoTable](https://github.com/simonbengtsson/jsPDF-AutoTable) 5.0.8, MIT (`vendor/jspdf/`)
+- [PDF.js](https://mozilla.github.io/pdf.js/) 6.3.289 (legacy build), Apache-2.0 (`vendor/pdfjs/`)
+
+Note for self-hosting: PDF.js is JavaScript modules (`.mjs`), which the server must send as `text/javascript`. GitHub Pages does; a stock nginx needs `types { text/javascript mjs; }`.

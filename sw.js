@@ -1,7 +1,7 @@
 // Keeps the planner working with no signal once it's been opened (installed or not).
 // Serves the saved copy right away and refreshes it in the background, so updates arrive on the next open.
 // Bump CACHE when this file list changes.
-const CACHE = 'planner-v5';
+const CACHE = 'planner-v7';
 const FILES = [
   './',
   'index.html',
@@ -14,6 +14,12 @@ const FILES = [
   'vendor/fontawesome/css/fontawesome.min.css',
   'vendor/fontawesome/css/solid.min.css',
   'vendor/fontawesome/webfonts/fa-solid-900.woff2',
+  // Week PDF (loaded only when the PDF button is used, but cached so it works offline)
+  'vendor/jspdf/jspdf.umd.min.js',
+  'vendor/jspdf/jspdf.plugin.autotable.min.js',
+  // PDF preview (pdf.js; also loaded only when used)
+  'vendor/pdfjs/pdf.min.mjs',
+  'vendor/pdfjs/pdf.worker.min.mjs',
 ];
 
 self.addEventListener('install', e => {
